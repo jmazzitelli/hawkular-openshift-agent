@@ -33,6 +33,7 @@ const (
 	ENDPOINT_TYPE_PROMETHEUS EndpointType = "prometheus"
 	ENDPOINT_TYPE_JOLOKIA                 = "jolokia"
 	ENDPOINT_TYPE_JSON                    = "json"
+	ENDPOINT_TYPE_HAWKULAR                = "hawkular"
 )
 
 // MonitoredMetric provides information about a specific metric that is to be collected.
@@ -126,7 +127,7 @@ func (e *Endpoint) ValidateEndpoint() error {
 	if e.Type == "" {
 		return fmt.Errorf("Endpoint [%v] is missing a valid type", e.URL)
 	} else {
-		if e.Type != ENDPOINT_TYPE_JOLOKIA && e.Type != ENDPOINT_TYPE_PROMETHEUS && e.Type != ENDPOINT_TYPE_JSON {
+		if e.Type != ENDPOINT_TYPE_JOLOKIA && e.Type != ENDPOINT_TYPE_PROMETHEUS && e.Type != ENDPOINT_TYPE_JSON && e.Type != ENDPOINT_TYPE_HAWKULAR {
 			return fmt.Errorf("Endpoint [%v] has invalid type [%v]", e.URL, e.Type)
 		}
 	}
