@@ -100,7 +100,7 @@ func main() {
 
 	// prepare the collector manager and start monitoring the pre-configured endpoints
 	collectorManager := manager.NewMetricsCollectorManager(Configuration,
-		storageManager.MetricsChannel, storageManager.MetricDefinitionsChannel)
+		storageManager.MetricsChannel, storageManager.MetricDefinitionsChannel, storageManager.AlertChannel)
 	collectorManager.StartCollectingEndpoints(Configuration.Endpoints)
 
 	// Start monitoring the node, if any

@@ -47,9 +47,10 @@ type MetricsCollectorManager struct {
 	metricsTracker tracker.MetricsTracker
 	metricsChan    chan []hmetrics.MetricHeader
 	metricDefsChan chan []hmetrics.MetricDefinition
+	AlertChannel   chan string
 }
 
-func NewMetricsCollectorManager(conf *config.Config, metricsChan chan []hmetrics.MetricHeader, metricDefsChan chan []hmetrics.MetricDefinition) *MetricsCollectorManager {
+func NewMetricsCollectorManager(conf *config.Config, metricsChan chan []hmetrics.MetricHeader, metricDefsChan chan []hmetrics.MetricDefinition, alertChan chan string) *MetricsCollectorManager {
 	mcm := &MetricsCollectorManager{
 		TickersLock:    &sync.Mutex{},
 		Tickers:        make(map[collector.CollectorID]*time.Ticker),
@@ -57,6 +58,7 @@ func NewMetricsCollectorManager(conf *config.Config, metricsChan chan []hmetrics
 		metricsTracker: tracker.NewMetricsTracker(conf.Collector.Max_Metrics_Per_Pod),
 		metricsChan:    metricsChan,
 		metricDefsChan: metricDefsChan,
+		AlertChannel:   alertChan,
 	}
 
 	// allow the status reporter to know how many metrics we are collecting

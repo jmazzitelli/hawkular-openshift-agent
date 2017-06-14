@@ -106,10 +106,13 @@ func (nec *NodeEventConsumer) Stop() {
 // all node events as they come in. Depending on the node event, this
 // will start or stop collecting metrics for one or more monitored endpoints.
 func (nec *NodeEventConsumer) consumeNodeEvents() {
+
 	for ne := range nec.Discovery.NodeEventChannel {
 		switch ne.Trigger {
 		case POD_ADDED:
 			{
+				nec.MetricsCollectorManager.AlertChannel <- "ADD:" + ne.Pod.GetIdentifier()
+
 				// If we do not have the new pod's config yet, there's nothing to do.
 				// (we will wait for the config to come in later)
 				if ne.ConfigMapEntry != nil {
@@ -118,6 +121,8 @@ func (nec *NodeEventConsumer) consumeNodeEvents() {
 			}
 		case POD_MODIFIED:
 			{
+				nec.MetricsCollectorManager.AlertChannel <- "MOD:" + ne.Pod.GetIdentifier()
+
 				// a modified pod might have changed the configmap it is using which means it might
 				// have completely changed the endpoints its collecting. So we need to stop collecting
 				// everything so we start collecting only those endpoints in the potentially new and different configmap.
@@ -130,6 +135,8 @@ func (nec *NodeEventConsumer) consumeNodeEvents() {
 			}
 		case POD_DELETED:
 			{
+				nec.MetricsCollectorManager.AlertChannel <- "DEL:" + ne.Pod.GetIdentifier()
+
 				nec.stopCollecting(ne)
 			}
 		case CONFIG_MAP_ADDED:

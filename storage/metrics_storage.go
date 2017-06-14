@@ -18,10 +18,13 @@
 package storage
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	nethttp "net/http"
 	"os"
 	"reflect"
 	"strings"
@@ -32,6 +35,7 @@ import (
 	"github.com/hawkular/hawkular-openshift-agent/config"
 	"github.com/hawkular/hawkular-openshift-agent/config/security"
 	agentmetrics "github.com/hawkular/hawkular-openshift-agent/emitter/metrics"
+	"github.com/hawkular/hawkular-openshift-agent/http"
 	"github.com/hawkular/hawkular-openshift-agent/k8s"
 	"github.com/hawkular/hawkular-openshift-agent/log"
 )
@@ -39,9 +43,19 @@ import (
 type MetricsStorageManager struct {
 	MetricsChannel              chan []hmetrics.MetricHeader
 	MetricDefinitionsChannel    chan []hmetrics.MetricDefinition
+	AlertChannel                chan string
 	hawkClientMetrics           *hmetrics.Client
 	hawkClientMetricDefinitions *hmetrics.Client
 	globalConfig                *config.Config
+}
+
+type Alert struct {
+	Id       string            `json:"id"`
+	Ctime    int64             `json:"ctime"`
+	DataId   string            `json:"dataId"`
+	Category string            `json:"category"`
+	Text     string            `json:"text"`
+	Tags     map[string]string `json:"tags"`
 }
 
 func NewMetricsStorageManager(conf *config.Config) (ms *MetricsStorageManager, err error) {
@@ -64,6 +78,7 @@ func NewMetricsStorageManager(conf *config.Config) (ms *MetricsStorageManager, e
 	ms = &MetricsStorageManager{
 		MetricsChannel:              make(chan []hmetrics.MetricHeader, 100),
 		MetricDefinitionsChannel:    make(chan []hmetrics.MetricDefinition, 100),
+		AlertChannel:                make(chan string, 100),
 		hawkClientMetrics:           clientMetrics,
 		hawkClientMetricDefinitions: clientMetricDefs,
 		globalConfig:                conf,
@@ -75,12 +90,81 @@ func (ms *MetricsStorageManager) StartStoringMetrics() {
 	log.Info("START storing metrics definitions and data")
 	go ms.consumeMetricDefinitions()
 	go ms.consumeMetrics()
+	go ms.consumeAlert()
 }
 
 func (ms *MetricsStorageManager) StopStoringMetrics() {
 	log.Info("STOP storing metrics definitions and data")
 	close(ms.MetricsChannel)
 	close(ms.MetricDefinitionsChannel)
+	close(ms.AlertChannel)
+}
+
+func (ms *MetricsStorageManager) consumeAlert() {
+	for alert := range ms.AlertChannel {
+
+		ev := Alert{
+			Id:       alert,
+			Category: "OPENSHIFT",
+			Ctime:    time.Now().Unix(),
+			DataId:   "HOSA",
+			Text:     alert,
+		}
+		reqBody, err := json.Marshal(ev)
+		if err != nil {
+			log.Errorf("Failed to create body for alert [%v]. err=%v", alert, err)
+			return
+		}
+
+		tenant := ms.globalConfig.Hawkular_Server.Tenant
+		log.Tracef("Using tenant %v", tenant)
+		httpConfig := http.HttpClientConfig{
+			Identity: &ms.globalConfig.Identity,
+			TLSConfig: &tls.Config{
+				InsecureSkipVerify: ms.globalConfig.Hawkular_Server.TLS.Skip_Certificate_Validation,
+			},
+		}
+		httpClient, err := httpConfig.BuildHttpClient()
+		if err != nil {
+			log.Errorf("Failed to create http client for alert [%v]. err=%v", alert, err)
+			return
+		}
+
+		url := ms.globalConfig.Hawkular_Server.URL + "/hawkular-alerts/events"
+		reqBody2, _ := json.Marshal(ev)
+		log.Warningf("!!!!!!!!!!!!!!!!!!!!!!!!!!!! %v --> %v", url, string(reqBody2))
+
+		req, err := nethttp.NewRequest("POST", url, bytes.NewBuffer(reqBody))
+		if err != nil {
+			log.Errorf("Cannot create HTTP request for URL [%v]: err= %v", url, err)
+			return
+		}
+
+		req.Header.Add("Hawkular-Tenant", tenant)
+
+		// Add the auth header if we need one
+		headerName, headerValue, err := ms.globalConfig.Hawkular_Server.Credentials.GetHttpAuthHeader()
+		if err != nil {
+			log.Errorf("Cannot create HTTP request auth header for URL [%v]: err= %v", url, err)
+			return
+		}
+		if headerName != "" {
+			req.Header.Add(headerName, headerValue)
+		}
+
+		// Submit the request to alert url
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			log.Errorf("Cannot put to alert URL [%v]: err=%v", url, err)
+			return
+		}
+
+		defer resp.Body.Close()
+
+		if resp.StatusCode != nethttp.StatusOK {
+			log.Errorf("URL [%v] returned error status [%v/%v]", url, resp.StatusCode, resp.Status)
+		}
+	}
 }
 
 func (ms *MetricsStorageManager) consumeMetricDefinitions() {
