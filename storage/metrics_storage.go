@@ -104,7 +104,7 @@ func (ms *MetricsStorageManager) consumeAlert() {
 	for alert := range ms.AlertChannel {
 
 		ev := Alert{
-			Id:       alert,
+			Id:       fmt.Sprintf("%v-%v", alert, time.Now().Unix()),
 			Category: "OPENSHIFT",
 			Ctime:    time.Now().Unix(),
 			DataId:   "HOSA",
@@ -130,7 +130,7 @@ func (ms *MetricsStorageManager) consumeAlert() {
 			return
 		}
 
-		url := ms.globalConfig.Hawkular_Server.URL + "/hawkular-alerts/events"
+		url := ms.globalConfig.Hawkular_Server.URL + "/hawkular/alerts/events"
 		reqBody2, _ := json.Marshal(ev)
 		log.Warningf("!!!!!!!!!!!!!!!!!!!!!!!!!!!! %v --> %v", url, string(reqBody2))
 
